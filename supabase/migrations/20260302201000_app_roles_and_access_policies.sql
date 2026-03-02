@@ -94,13 +94,9 @@ grant execute on function public.is_responsabile_casa() to authenticated;
 
 alter table public.user_profiles enable row level security;
 alter table public.responsabili_case enable row level security;
-alter table public.submissions enable row level security;
-alter table public.case_alloggio_submissions enable row level security;
 
 grant select, insert, update, delete on table public.user_profiles to authenticated;
 grant select, insert, update, delete on table public.responsabili_case to authenticated;
-grant select, insert, update, delete on table public.submissions to authenticated;
-grant select, insert, update, delete on table public.case_alloggio_submissions to authenticated;
 
 -- user_profiles policies
 drop policy if exists user_profiles_admin_all on public.user_profiles;
@@ -149,62 +145,86 @@ to authenticated
 using (auth.uid() = user_id);
 
 -- submissions policies
-drop policy if exists submissions_select_own on public.submissions;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'submissions'
+  ) then
+    alter table public.submissions enable row level security;
+    grant select, insert, update, delete on table public.submissions to authenticated;
 
-drop policy if exists submissions_admin_all on public.submissions;
-create policy submissions_admin_all
-on public.submissions
-for all
-to authenticated
-using (public.is_admin())
-with check (public.is_admin());
+    drop policy if exists submissions_select_own on public.submissions;
+    drop policy if exists submissions_admin_all on public.submissions;
+    create policy submissions_admin_all
+    on public.submissions
+    for all
+    to authenticated
+    using (public.is_admin())
+    with check (public.is_admin());
 
-drop policy if exists submissions_manager_select on public.submissions;
-create policy submissions_manager_select
-on public.submissions
-for select
-to authenticated
-using (public.is_manager());
+    drop policy if exists submissions_manager_select on public.submissions;
+    create policy submissions_manager_select
+    on public.submissions
+    for select
+    to authenticated
+    using (public.is_manager());
 
-drop policy if exists submissions_select_own on public.submissions;
-create policy submissions_select_own
-on public.submissions
-for select
-to authenticated
-using (lower(owner_email) = lower(coalesce(auth.jwt()->>'email', '')));
+    drop policy if exists submissions_select_own on public.submissions;
+    create policy submissions_select_own
+    on public.submissions
+    for select
+    to authenticated
+    using (lower(owner_email) = lower(coalesce(auth.jwt()->>'email', '')));
+  end if;
+end $$;
 
 -- case_alloggio_submissions policies
-drop policy if exists case_alloggio_submissions_select_own on public.case_alloggio_submissions;
-
-drop policy if exists case_alloggio_submissions_admin_all on public.case_alloggio_submissions;
-create policy case_alloggio_submissions_admin_all
-on public.case_alloggio_submissions
-for all
-to authenticated
-using (public.is_admin())
-with check (public.is_admin());
-
-drop policy if exists case_alloggio_submissions_manager_select on public.case_alloggio_submissions;
-create policy case_alloggio_submissions_manager_select
-on public.case_alloggio_submissions
-for select
-to authenticated
-using (public.is_manager());
-
-drop policy if exists case_alloggio_submissions_responsabile_casa_select on public.case_alloggio_submissions;
-create policy case_alloggio_submissions_responsabile_casa_select
-on public.case_alloggio_submissions
-for select
-to authenticated
-using (
-  public.is_responsabile_casa()
-  and exists (
+do $$
+begin
+  if exists (
     select 1
-    from public.responsabili_case rc
-    where rc.user_id = auth.uid()
-      and lower(rc.struttura) = lower(case_alloggio_submissions.struttura)
-  )
-);
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'case_alloggio_submissions'
+  ) then
+    alter table public.case_alloggio_submissions enable row level security;
+    grant select, insert, update, delete on table public.case_alloggio_submissions to authenticated;
+
+    drop policy if exists case_alloggio_submissions_select_own on public.case_alloggio_submissions;
+    drop policy if exists case_alloggio_submissions_admin_all on public.case_alloggio_submissions;
+    create policy case_alloggio_submissions_admin_all
+    on public.case_alloggio_submissions
+    for all
+    to authenticated
+    using (public.is_admin())
+    with check (public.is_admin());
+
+    drop policy if exists case_alloggio_submissions_manager_select on public.case_alloggio_submissions;
+    create policy case_alloggio_submissions_manager_select
+    on public.case_alloggio_submissions
+    for select
+    to authenticated
+    using (public.is_manager());
+
+    drop policy if exists case_alloggio_submissions_responsabile_casa_select on public.case_alloggio_submissions;
+    create policy case_alloggio_submissions_responsabile_casa_select
+    on public.case_alloggio_submissions
+    for select
+    to authenticated
+    using (
+      public.is_responsabile_casa()
+      and exists (
+        select 1
+        from public.responsabili_case rc
+        where rc.user_id = auth.uid()
+          and lower(rc.struttura) = lower(case_alloggio_submissions.struttura)
+      )
+    );
+  end if;
+end $$;
 
 -- Esempi di bootstrap ruoli (sostituisci UUID reali utenti auth.users):
 -- insert into public.user_profiles (user_id, role, full_name)
